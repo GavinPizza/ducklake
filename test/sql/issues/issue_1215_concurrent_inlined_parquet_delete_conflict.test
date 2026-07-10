@@ -189,8 +189,9 @@ conflict
 # Cross-store, different stores: an inlined-file delete concurrent with an inlined-data delete on one
 # table. The file-level check probes the inlined-file-delete table, which is created lazily and does
 # not exist when the other transaction only deleted inlined data. That probe must tolerate its absence:
-# a missing table means "no inlined-file deletes", not a commit error. The table-granular inlined check
-# still reports a conflict here (relaxed to a clean commit once the check is narrowed to inlined-data).
+# a missing table means "no inlined-file deletes", not a commit error. The committer here deleted inlined
+# file data only, so #1287's table check (gated on inlined-data deletes) does not fire, and its disjoint-row
+# delete on a different store commits cleanly.
 # ----------------------------------------------------------------------------------------------
 
 # 100 rows land in a parquet data file; a small insert of 5 rows is kept as inlined data
@@ -221,16 +222,15 @@ DELETE FROM ducklake.test_e WHERE i = 5
 statement ok con1
 COMMIT
 
-# con2 must not crash on the absent inlined-delete table; it reports a proper conflict, not an internal error
-statement error con2
+# con2 must not crash on the absent inlined-delete table; with #1287's narrowed check it commits cleanly
+statement ok con2
 COMMIT
-----
-conflict
 
 # ----------------------------------------------------------------------------------------------
-# Mirror of the case above: the inlined-file delete commits first, the inlined-data delete second.
-# The second committer records no inlined-file deletes, so it never probes the delete table; the
-# table-granular inlined check still reports a conflict. This must also avoid an internal error.
+# Not a behavioral mirror of the case above under #1287: here the second committer deleted inlined data
+# (the inlined-file delete commits first), so #1287's table check - gated on the committer's inlined-data
+# deletes - does fire and still reports a conflict. The committer records no inlined-file deletes, so it
+# never probes the delete table; this must also avoid an internal error.
 # ----------------------------------------------------------------------------------------------
 
 statement ok

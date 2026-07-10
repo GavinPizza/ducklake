@@ -325,10 +325,20 @@ void DuckLakeTransactionState::CheckForConflicts(
 			}
 		}
 	}
+	// inlined-data deletes are not file-partitioned, so the file-level block above does not cover them;
+	// they still conflict at table granularity (#1287 relaxes only the inlined-file-delete case to files)
+	set<TableIndex> tables_deleted_inlined_data;
+	for (auto &entry : local_changes.Changes()) {
+		if (!entry.GetTableChanges().new_inlined_data_deletes.empty()) {
+			tables_deleted_inlined_data.insert(entry.GetTableIndex());
+		}
+	}
 	for (auto &table_id : changes.tables_deleted_inlined) {
 		ConflictCheck(table_id, other_changes.dropped_tables, "delete from table", "dropped it");
 		ConflictCheck(table_id, other_changes.altered_tables, "delete from table", "altered it");
-		ConflictCheck(table_id, other_changes.tables_deleted_inlined, "delete from table", "deleted from it");
+		if (tables_deleted_inlined_data.find(table_id) != tables_deleted_inlined_data.end()) {
+			ConflictCheck(table_id, other_changes.tables_deleted_inlined, "delete from table", "deleted from it");
+		}
 		ConflictCheck(table_id, other_changes.tables_flushed_inlined, "delete from table", "flushed the inlined data");
 		ConflictCheck(table_id, other_changes.inserted_tables, "delete from table", "inserted into it");
 		ConflictCheck(table_id, other_changes.tables_inserted_inlined, "delete from table", "inserted into it");

@@ -56,7 +56,8 @@
         "test/sql/transaction/transaction_conflicts_view.test",
         "test/sql/concurrent/file_level_conflict.test",
         "test/sql/transaction/transaction_conflict_inlining.test",
-        "test/sql/issues/issue_1215_concurrent_inlined_parquet_delete_conflict.test"
+        "test/sql/issues/issue_1215_concurrent_inlined_parquet_delete_conflict.test",
+        "test/sql/issues/issue_1287_inlined_delete_file_granularity_conflict.test"
       ]
     },
     {
