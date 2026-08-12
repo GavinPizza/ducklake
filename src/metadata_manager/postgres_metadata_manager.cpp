@@ -98,7 +98,7 @@ unique_ptr<QueryResult> PostgresMetadataManager::ExecuteQuery(DuckLakeSnapshot s
 	auto catalog_literal = DuckLakeUtil::SQLLiteralToString(ducklake_catalog.MetadataDatabaseName());
 	auto schema_identifier = DuckLakeUtil::SQLIdentifierToString(ducklake_catalog.MetadataSchemaName());
 	auto schema_identifier_escaped = StringUtil::Replace(schema_identifier, "'", "''");
-	auto schema_literal = DuckLakeUtil::SQLLiteralToString(ducklake_catalog.MetadataSchemaName());
+	auto schema_literal = DuckLakeUtil::SQLLiteralToString(ducklake_catalog.MetadataSchemaName().GetIdentifierName());
 	auto metadata_path = DuckLakeUtil::SQLLiteralToString(ducklake_catalog.MetadataPath());
 	auto data_path = DuckLakeUtil::SQLLiteralToString(ducklake_catalog.DataPath());
 
@@ -131,7 +131,7 @@ string PostgresMetadataManager::InlinedDeleteTableExistsQuery(const string &tabl
 	// the {METADATA_SCHEMA_ESCAPED} placeholder is built for identifiers (SQLIdentifierToString + one more '->'').
 	auto &ducklake_catalog = transaction.GetCatalog();
 	auto schema_literal =
-	    StringUtil::Replace(DuckLakeUtil::SQLLiteralToString(ducklake_catalog.MetadataSchemaName()), "'", "''");
+	    StringUtil::Replace(DuckLakeUtil::SQLLiteralToString(ducklake_catalog.MetadataSchemaName().GetIdentifierName()), "'", "''");
 	auto table_literal = StringUtil::Replace(DuckLakeUtil::SQLLiteralToString(table_name), "'", "''");
 	return StringUtil::Format("SELECT 1 FROM postgres_query({METADATA_CATALOG_NAME_LITERAL}, "
 	                          "'SELECT 1 FROM information_schema.tables WHERE table_schema = %s AND table_name = %s')",
