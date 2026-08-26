@@ -1,0 +1,107 @@
+# name: test/sql/alter/alter_column_type_stats_widening.test
+# description: bounds that reread exactly at the wider type must survive ALTER COLUMN ... TYPE
+# group: [alter]
+
+require ducklake
+
+require parquet
+
+test-env DUCKLAKE_CONNECTION {TEST_DIR}/{UUID}.db
+
+test-env DATA_PATH {TEST_DIR}
+
+statement ok
+ATTACH 'ducklake:{DUCKLAKE_CONNECTION}' AS ducklake (DATA_PATH '{DATA_PATH}/alter_column_type_stats_widening_files', METADATA_CATALOG 'ducklake_meta')
+
+# an integral bound rereads exactly as DECIMAL
+statement ok
+CREATE TABLE ducklake.t1 (v INTEGER)
+
+statement ok
+INSERT INTO ducklake.t1 VALUES (10), (20)
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE ducklake.t1 ALTER COLUMN v TYPE DECIMAL(18,2)
+
+statement ok
+INSERT INTO ducklake.t1 VALUES (30)
+
+statement ok
+COMMIT
+
+query II
+SELECT min_value, max_value
+FROM ducklake_meta.ducklake_table_column_stats
+WHERE table_id = 1 AND column_id = 1
+----
+10	30.00
+
+# past 2^53 the bound has no exact DOUBLE, but the data takes the same cast
+statement ok
+CREATE TABLE ducklake.t2 (v BIGINT)
+
+statement ok
+INSERT INTO ducklake.t2 VALUES (9007199254740993), (1)
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE ducklake.t2 ALTER COLUMN v TYPE DOUBLE
+
+statement ok
+INSERT INTO ducklake.t2 VALUES (2.5)
+
+statement ok
+COMMIT
+
+query II
+SELECT min_value, max_value
+FROM ducklake_meta.ducklake_table_column_stats
+WHERE table_id = 2 AND column_id = 1
+----
+1	9007199254740993
+
+# v + 0 blocks the pushdown, so this compares the stat against the files
+query I
+SELECT count(*) FROM (SELECT v + 0 AS v FROM ducklake.t2)
+WHERE v < (SELECT min_value::DOUBLE FROM ducklake_meta.ducklake_table_column_stats WHERE table_id = 2 AND column_id = 1)
+OR v > (SELECT max_value::DOUBLE FROM ducklake_meta.ducklake_table_column_stats WHERE table_id = 2 AND column_id = 1)
+----
+0
+
+# likewise for a DECIMAL wider than DOUBLE's mantissa
+statement ok
+CREATE TABLE ducklake.t3 (v DECIMAL(38,10))
+
+statement ok
+INSERT INTO ducklake.t3 VALUES (0.1000000001), (12345678901234567890.1234567891)
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE ducklake.t3 ALTER COLUMN v TYPE DOUBLE
+
+statement ok
+INSERT INTO ducklake.t3 VALUES (0.05)
+
+statement ok
+COMMIT
+
+query II
+SELECT min_value, max_value
+FROM ducklake_meta.ducklake_table_column_stats
+WHERE table_id = 3 AND column_id = 1
+----
+0.05	12345678901234567890.1234567891
+
+query I
+SELECT count(*) FROM (SELECT v + 0 AS v FROM ducklake.t3)
+WHERE v < (SELECT min_value::DOUBLE FROM ducklake_meta.ducklake_table_column_stats WHERE table_id = 3 AND column_id = 1)
+OR v > (SELECT max_value::DOUBLE FROM ducklake_meta.ducklake_table_column_stats WHERE table_id = 3 AND column_id = 1)
+----
+0
