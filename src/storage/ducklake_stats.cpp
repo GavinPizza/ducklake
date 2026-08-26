@@ -109,7 +109,14 @@ bool DuckLakeColumnStats::BoundsSurviveTypePromotion(const LogicalType &source, 
 	if (source.IsIntegral() && target.IsIntegral()) {
 		return true;
 	}
-	return source.id() == LogicalTypeId::DECIMAL && target.id() == LogicalTypeId::DECIMAL;
+	if (source.id() == LogicalTypeId::DECIMAL && target.id() == LogicalTypeId::DECIMAL) {
+		return true;
+	}
+	// the bound text and the data convert to the same value at the wider type
+	if (source.IsIntegral() || source.id() == LogicalTypeId::DECIMAL) {
+		return target.id() == LogicalTypeId::DOUBLE || target.id() == LogicalTypeId::DECIMAL;
+	}
+	return false;
 }
 
 void DuckLakeColumnStats::MergeStats(const DuckLakeColumnStats &new_stats) {
